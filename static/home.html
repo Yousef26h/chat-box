@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Go Chat App</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .chat-container {
+            width: 800px;
+            max-width: 95vw;
+            height: 600px;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .chat-header {
+            padding: 20px 30px;
+            background: #2d3748;
+            color: white;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .chat-header h1 {
+            font-size: 24px;
+            font-weight: 600;
+        }
+
+        .online-count {
+            background: #48bb78;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .messages {
+            flex: 1;
+            padding: 20px 30px;
+            overflow-y: auto;
+            background: #f7fafc;
+        }
+
+        .message {
+            margin-bottom: 15px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .message.system {
+            align-items: center;
+        }
+
+        .message.system .message-content {
+            background: #edf2f7;
+            color: #4a5568;
+            font-size: 14px;
+            padding: 5px 15px;
+            border-radius: 20px;
+        }
+
+        .message.own {
+            align-items: flex-end;
+        }
+
+        .message.own .message-content {
+            background: #667eea;
+            color: white;
+        }
+
+        .message-content {
+            max-width: 70%;
+            padding: 10px 15px;
+            border-radius: 12px;
+            background: white;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            word-wrap: break-word;
+        }
+
+        .message-meta {
+            font-size: 12px;
+            color: #a0aec0;
+            margin-top: 3px;
+            display: flex;
+            gap: 10px;
+        }
+
+        .message.own .message-meta {
+            justify-content: flex-end;
+        }
+
+        .message-sender {
+            font-weight: 600;
+            color: #2d3748;
+        }
+
+        .message-time {
+            color: #a0aec0;
+        }
+
+        .input-area {
+            padding: 20px 30px;
+            background: white;
+            border-top: 1px solid #e2e8f0;
+            display: flex;
+            gap: 10px;
+        }
+
+        .input-area input[type="text"] {
+            flex: 1;
+            padding: 10px 15px;
+            border: 2px solid #e2e8f0;
+            border-radius: 10px;
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .input-area input[type="text"]:focus {
+            border-color: #667eea;
+        }
+
+        .input-area button {
+            padding: 10px 25px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .input-area button:hover {
+            background: #5a67d8;
+        }
+
+        .input-area button:active {
+            transform: scale(0.95);
+        }
+
+        .join-container {
+            display: flex;
+            gap: 10px;
+            padding: 20px;
+        }
+
+        .join-container input {
+            flex: 1;
+            padding: 10px 15px;
+            border: 2px solid #e2e8f0;
+            border-radius: 10px;
+            font-size: 14px;
+        }
+
+        .join-container button {
+            padding: 10px 25px;
+            background: #48bb78;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+    <div class="chat-container" id="app">
+        <div class="chat-header">
+            <h1>💬 Go Chat</h1>
+            <span class="online-count" id="onlineCount">0 online</span>
+        </div>
+
+        <!-- Join screen -->
+        <div id="joinScreen" style="flex:1; display:flex; align-items:center; justify-content:center;">
+            <div style="text-align:center; padding: 30px;">
+                <h2 style="margin-bottom: 20px; color: #2d3748;">Join the Chat</h2>
+                <div class="join-container">
+                    <input type="text" id="usernameInput" placeholder="Enter username..." value="User" />
+                    <button onclick="joinChat()">Join</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Chat screen -->
+        <div id="chatScreen" class="hidden" style="flex:1; display:flex; flex-direction:column;">
+            <div class="messages" id="messages"></div>
+            <div class="input-area">
+                <input type="text" id="messageInput" placeholder="Type a message..." />
+                <button onclick="sendMessage()">Send</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let username = '';
+        let connected = false;
+
+        function joinChat() {
+            const input = document.getElementById('usernameInput');
+            username = input.value.trim() || 'Anonymous';
+            
+            // Connect to WebSocket
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/ws?username=${encodeURIComponent(username)}`;
+            
+            ws = new WebSocket(wsUrl);
+            
+            ws.onopen = function() {
+                connected = true;
+                document.getElementById('joinScreen').style.display = 'none';
+                document.getElementById('chatScreen').style.display = 'flex';
+                document.getElementById('messageInput').focus();
+                
+                // Update online count
+                // (will be updated via system messages)
+            };
+            
+            ws.onmessage = function(event) {
+                try {
+                    const messages = event.data.split('\n');
+                    messages.forEach(msg => {
+                        if (msg.trim()) {
+                            const data = JSON.parse(msg);
+                            displayMessage(data);
+                        }
+                    });
+                } catch (e) {
+                    console.error('Error parsing message:', e);
+                }
+            };
+            
+            ws.onclose = function() {
+                connected = false;
+                alert('Disconnected from server. Please refresh the page.');
+            };
+            
+            ws.onerror = function(error) {
+                console.error('WebSocket error:', error);
+            };
+        }
+
+        function sendMessage() {
+            if (!connected) {
+                alert('Not connected to server!');
+                return;
+            }
+            
+            const input = document.getElementById('messageInput');
+            const content = input.value.trim();
+            
+            if (!content) return;
+            
+            const message = {
+                type: 'chat',
+                content: content,
+                sender: username
+            };
+            
+            ws.send(JSON.stringify(message));
+            input.value = '';
+            input.focus();
+        }
+
+        function displayMessage(data) {
+            const messagesDiv = document.getElementById('messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message';
+            
+            if (data.type === 'system') {
+                messageDiv.className += ' system';
+                messageDiv.innerHTML = `
+                    <div class="message-content">${data.content}</div>
+                `;
+                
+                // Update online count if system message contains join/leave
+                if (data.content.includes('joined')) {
+                    updateOnlineCount(1);
+                } else if (data.content.includes('left')) {
+                    updateOnlineCount(-1);
+                }
+            } else {
+                const isOwn = data.sender === username;
+                if (isOwn) {
+                    messageDiv.className += ' own';
+                }
+                
+                messageDiv.innerHTML = `
+                    <div class="message-content">${escapeHtml(data.content)}</div>
+                    <div class="message-meta">
+                        <span class="message-sender">${escapeHtml(data.sender)}</span>
+                        <span class="message-time">${data.time || ''}</span>
+                    </div>
+                `;
+            }
+            
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        function updateOnlineCount(delta) {
+            const countEl = document.getElementById('onlineCount');
+            const current = parseInt(countEl.textContent) || 0;
+            const newCount = current + delta;
+            countEl.textContent = `${newCount} online`;
+        }
+
+        function escapeHtml(unsafe) {
+            return unsafe
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
+        // Allow Enter key to send message
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('messageInput').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    sendMessage();
+                }
+            });
+            
+            document.getElementById('usernameInput').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    joinChat();
+                }
+            });
+        });
+    </script>
+</body>
+</html>
